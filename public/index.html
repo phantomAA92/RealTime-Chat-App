@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modern Chat App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.2.47/dist/vue.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jwt-decode@3.1.2/build/jwt-decode.min.js"></script>
+  <style>
+    .chat-container {
+      height: calc(100vh - 130px);
+    }
+    .message-bubble {
+      max-width: 70%;
+      border-radius: 1.125rem;
+    }
+    .online-dot {
+      width: 10px;
+      height: 10px;
+      background-color: #10B981;
+      border-radius: 50%;
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      border: 2px solid white;
+    }
+    .file-input {
+      display: none;
+    }
+    .profile-image {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    @media (max-width: 768px) {
+      .chat-container {
+        height: calc(100vh - 100px);
+      }
+      .sidebar {
+        width: 100% !important;
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100%;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out;
+        z-index: 30;
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .sidebar.open::after {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: -1;
+      }
+      .chat-area {
+        width: 100% !important;
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100%;
+        transform: translateX(0);
+        transition: transform 0.3s ease-in-out;
+        z-index: 20;
+      }
+      .sidebar.open ~ .chat-area {
+        transform: translateX(100%);
+        visibility: hidden;
+      }
+      .message-input {
+        flex-direction: column;
+        gap: 10px;
+      }
+      .message-input input {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div id="app" class="h-screen flex flex-col">
+    <!-- Auth Section -->
+    <div id="auth-section" class="flex items-center justify-center h-full" v-if="!isAuthenticated">
+      <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+        <h1 class="text-xl font-bold mb-4 text-center">{{ isRegistering ? 'Register' : 'Login' }}</h1>
+        
+        <div v-if="authError" class="mb-3 p-2 bg-red-100 text-red-700 rounded text-sm">
+          {{ authError }}
+        </div>
+        
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <input v-model="username" type="text" class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input v-model="password" type="password" class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          
+          <button @click="handleAuth" class="w-full bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600 transition">
+            {{ isRegistering ? 'Register' : 'Login' }}
+          </button>
+          
+          <p class="text-center text-sm text-gray-600">
+            {{ isRegistering ? 'Already have an account?' : 'Need an account?' }}
+            <a @click="isRegistering = !isRegistering" class="text-blue-500 cursor-pointer hover:underline">
+              {{ isRegistering ? 'Login' : 'Register' }}
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Chat Section -->
+    <div v-else class="flex flex-col h-full">
+      <!-- Header -->
+      <div class="bg-blue-500 text-white p-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+          <button @click="toggleSidebar" class="md:hidden text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/>
+            </svg>
+          </button>
+          <img v-if="currentUser.profileImage" :src="currentUser.profileImage" class="profile-image">
+          <div v-else class="profile-image bg-gray-300 flex items-center justify-center text-white font-medium">
+            {{ currentUser.username.charAt(0).toUpperCase() }}
+          </div>
+          <span class="font-semibold">{{ currentUser.username }}</span>
+        </div>
+        <button @click="handleLogout" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm">
+          Logout
+        </button>
+      </div>
+      
+      <!-- Main Content -->
+      <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar -->
+        <div class="sidebar w-1/4 bg-white border-r flex flex-col transition-all duration-300" :class="{ 'open': isSidebarOpen }">
+          <!-- Profile Upload -->
+          <div class="p-4 border-b">
+            <label class="cursor-pointer flex items-center space-x-3">
+              <div class="relative">
+                <img v-if="currentUser.profileImage" :src="currentUser.profileImage" class="profile-image">
+                <div v-else class="profile-image bg-gray-300 flex items-center justify-center text-white font-medium">
+                  {{ currentUser.username.charAt(0).toUpperCase() }}
+                </div>
+                <div class="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+              </div>
+              <span class="text-sm">Change Profile</span>
+              <input type="file" @change="handleProfileUpload" accept="image/*" class="file-input">
+            </label>
+          </div>
+          
+          <!-- Search Bar -->
+          <div class="p-4 border-b">
+            <div class="relative">
+              <input 
+                v-model="searchQuery"
+                @input="searchUsers"
+                type="text" 
+                placeholder="Search users..."
+                class="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              >
+              <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+          
+          <!-- Search Results -->
+          <div v-if="searchResults.length > 0" class="p-2 border-b">
+            <div v-for="user in searchResults" :key="user.username" class="p-2 flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <img v-if="user.profileImage" :src="user.profileImage" class="profile-image">
+                <div v-else class="profile-image bg-gray-300 flex items-center justify-center text-white font-medium">
+                  {{ user.username.charAt(0).toUpperCase() }}
+                </div>
+                <span>{{ user.username }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- User List -->
+          <div class="flex-1 overflow-y-auto p-2 scrollbar-hide">
+            <div class="p-2 font-medium text-gray-500">Group Chat</div>
+            <div 
+              @click="selectChat(null)" 
+              :class="{'bg-blue-100': !selectedUser}" 
+              class="p-3 rounded cursor-pointer flex items-center space-x-3 mb-1"
+            >
+              <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <span>Group Chat</span>
+            </div>
+            
+            <div class="p-2 font-medium text-gray-500">Users</div>
+            <div 
+              v-for="user in users" 
+              :key="user.username"
+              @click="selectChat(user)"
+              :class="{'bg-blue-100': selectedUser && selectedUser.username === user.username}" 
+              class="p-3 rounded cursor-pointer flex items-center space-x-3 mb-1"
+            >
+              <div class="relative">
+                <img v-if="user.profileImage" :src="user.profileImage" class="profile-image">
+                <div v-else class="profile-image bg-gray-300 flex items-center justify-center text-white font-medium">
+                  {{ user.username.charAt(0).toUpperCase() }}
+                </div>
+                <div v-if="user.online" class="online-dot"></div>
+              </div>
+              <div>
+                <div class="font-medium">{{ user.username }}</div>
+                <div class="text-xs text-gray-500 truncate">
+                  {{ user.online ? 'Online' : 'Offline' }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Chat Area -->
+        <div class="chat-area flex-1 flex flex-col">
+          <!-- Chat Header -->
+          <div v-if="selectedUser" class="p-4 border-b bg-white flex items-center space-x-3">
+            <button @click="toggleSidebar" class="md:hidden text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <img v-if="selectedUser.profileImage" :src="selectedUser.profileImage" class="profile-image">
+            <div v-else class="profile-image bg-gray-300 flex items-center justify-center text-white font-medium">
+              {{ selectedUser.username.charAt(0).toUpperCase() }}
+            </div>
+            <div>
+              <div class="font-semibold">{{ selectedUser.username }}</div>
+              <div class="text-xs text-gray-500">
+                {{ selectedUser.online ? 'Online' : 'Offline' }}
+              </div>
+            </div>
+          </div>
+          <div v-else class="p-4 border-b bg-white flex items-center space-x-3">
+            <button @click="toggleSidebar" class="md:hidden text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <div class="profile-image bg-blue-500 flex items-center justify-center text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <div class="font-semibold">Group Chat</div>
+          </div>
+          
+          <!-- Messages -->
+          <div class="flex-1 overflow-y-auto p-4 bg-gray-50 chat-container scrollbar-hide" ref="messagesContainer">
+            <div v-for="(message, index) in currentMessages" :key="message.id" class="mb-4 group relative">
+              <!-- Private Chat Messages -->
+              <div v-if="selectedUser">
+                <div :class="{
+                  'flex justify-end': message.from === currentUser.username, 
+                  'flex justify-start': message.from !== currentUser.username
+                }">
+                  <div :class="{
+                    'bg-blue-500 text-white': message.from === currentUser.username, 
+                    'bg-white': message.from !== currentUser.username
+                  }" class="message-bubble p-3">
+                    <div v-if="message.type === 'text'">{{ message.text }}</div>
+                    <img v-else-if="message.type === 'image'" :src="message.image" class="max-w-xs rounded-lg">
+                    <div :class="{
+                      'text-blue-100': message.from === currentUser.username, 
+                      'text-gray-500': message.from !== currentUser.username
+                    }" class="text-xs mt-1">
+                      {{ formatTime(message.timestamp) }}
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  v-if="message.from === currentUser.username"
+                  @click="deleteMessage(message.id, true)"
+                  class="absolute top-0 right-0 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 transition-opacity"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+              
+              <!-- Group Chat Messages -->
+              <div v-else>
+                <div :class="{'flex justify-end': message.user === currentUser.username, 'flex justify-start': message.user !== currentUser.username}">
+                  <div :class="{
+                    'bg-blue-500 text-white': message.user === currentUser.username, 
+                    'bg-white': message.user !== currentUser.username
+                  }" class="message-bubble p-3">
+                    <div v-if="message.user !== currentUser.username" class="text-xs font-semibold text-gray-700 mb-1">
+                      {{ message.user }}
+                    </div>
+                    <div v-if="message.type === 'text'">{{ message.text }}</div>
+                    <img v-else-if="message.type === 'image'" :src="message.image" class="max-w-xs rounded-lg">
+                    <div :class="{
+                      'text-blue-100': message.user === currentUser.username, 
+                      'text-gray-500': message.user !== currentUser.username
+                    }" class="text-xs mt-1">
+                      {{ formatTime(message.timestamp) }}
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  v-if="message.user === currentUser.username"
+                  @click="deleteMessage(message.id, false)"
+                  class="absolute top-0 right-0 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 transition-opacity"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div ref="messagesEnd"></div>
+          </div>
+          
+          <!-- Message Input -->
+          <div class="p-4 bg-white border-t">
+            <form @submit.prevent="sendMessage" class="message-input flex items-center space-x-2">
+              <label class="cursor-pointer text-gray-500 hover:text-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                <input type="file" @change="handleImageUpload" accept="image/*" class="file-input">
+              </label>
+              
+              <input
+                v-model="newMessage"
+                type="text"
+                placeholder="Type a message..."
+                class="flex-1 px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+              
+              <button type="submit" class="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+    
+    createApp({
+      setup() {
+        // Auth state
+        const isAuthenticated = ref(false);
+        const isRegistering = ref(false);
+        const username = ref('');
+        const password = ref('');
+        const authError = ref('');
+        const currentUser = ref({});
+        
+        // Chat state
+        const users = ref([]);
+        const selectedUser = ref(null);
+        const newMessage = ref('');
+        const messages = ref([]);
+        const privateMessages = ref({});
+        const socket = ref(null);
+        const messagesContainer = ref(null);
+        const messagesEnd = ref(null);
+        
+        // Search
+        const searchQuery = ref('');
+        const searchResults = ref([]);
+        
+        // Responsive state
+        const isSidebarOpen = ref(false);
+
+        // Computed properties
+        const currentMessages = computed(() => {
+          if (selectedUser.value) {
+            return privateMessages.value[selectedUser.value.username] || [];
+          } else {
+            return messages.value;
+          }
+        });
+        
+        // Methods
+        const handleAuth = async () => {
+          authError.value = '';
+          try {
+            const endpoint = isRegistering.value ? '/register' : '/login';
+            const response = await axios.post(`http://localhost:3001${endpoint}`, {
+              username: username.value,
+              password: password.value
+            });
+            
+            if (response.data.success) {
+              currentUser.value = {
+                username: username.value,
+                profileImage: response.data.profileImage
+              };
+              localStorage.setItem('token', response.data.token);
+              isAuthenticated.value = true;
+              connectSocket(response.data.token);
+              fetchUsers();
+            } else {
+              authError.value = response.data.error || 'Authentication failed';
+            }
+          } catch (error) {
+            authError.value = error.response?.data?.error || 'An error occurred';
+          }
+        };
+        
+        const handleLogout = () => {
+          if (socket.value) {
+            socket.value.disconnect();
+          }
+          localStorage.removeItem('token');
+          isAuthenticated.value = false;
+          currentUser.value = {};
+          username.value = '';
+          password.value = '';
+          messages.value = [];
+          privateMessages.value = {};
+          isSidebarOpen.value = false;
+        };
+        
+        const connectSocket = (token) => {
+          socket.value = io('http://localhost:3001', {
+            auth: { token }
+          });
+          
+          socket.value.on('connect', () => {
+            console.log('Connected to socket server');
+          });
+          
+          socket.value.on('userList', (userList) => {
+            users.value = userList.filter(user => user.username !== currentUser.value.username);
+          });
+          
+          socket.value.on('initialMessages', (initialMessages) => {
+            messages.value = initialMessages;
+            scrollToBottom();
+          });
+          
+          socket.value.on('initialPrivateMessages', (initialPrivateMessages) => {
+            privateMessages.value = initialPrivateMessages.reduce((acc, msg) => {
+              const otherUser = msg.from === currentUser.value.username ? msg.to : msg.from;
+              if (!acc[otherUser]) acc[otherUser] = [];
+              acc[otherUser].push(msg);
+              return acc;
+            }, {});
+            scrollToBottom();
+          });
+          
+          socket.value.on('message', (message) => {
+            messages.value.push(message);
+            scrollToBottom();
+          });
+          
+          socket.value.on('privateMessage', (message) => {
+            const otherUser = message.from === currentUser.value.username ? message.to : message.from;
+            if (!privateMessages.value[otherUser]) {
+              privateMessages.value[otherUser] = [];
+            }
+            privateMessages.value[otherUser].push(message);
+            scrollToBottom();
+          });
+          
+          socket.value.on('messageDeleted', ({ messageId, isPrivate }) => {
+            if (isPrivate) {
+              for (const user in privateMessages.value) {
+                privateMessages.value[user] = privateMessages.value[user].filter(msg => msg.id !== messageId);
+              }
+            } else {
+              messages.value = messages.value.filter(msg => msg.id !== messageId);
+            }
+          });
+          
+          socket.value.on('error', (error) => {
+            console.error('Socket error:', error);
+          });
+        };
+        
+        const fetchUsers = async () => {
+          try {
+            const response = await axios.get('http://localhost:3001/users', {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`
+              }
+            });
+            
+            if (response.data.success) {
+              users.value = response.data.users;
+            }
+          } catch (error) {
+            console.error('Failed to fetch users:', error);
+          }
+        };
+        
+        const selectChat = (user) => {
+          selectedUser.value = user;
+          if (window.innerWidth <= 768) {
+            isSidebarOpen.value = false;
+          }
+          nextTick(() => {
+            scrollToBottom();
+          });
+        };
+        
+        const sendMessage = () => {
+          if (!newMessage.value.trim()) return;
+          
+          if (selectedUser.value) {
+            socket.value.emit('privateMessage', { 
+              to: selectedUser.value.username,
+              message: { 
+                text: newMessage.value,
+                type: 'text'
+              }
+            }, (response) => {
+              if (response.success) {
+                const otherUser = response.message.to;
+                if (!privateMessages.value[otherUser]) {
+                  privateMessages.value[otherUser] = [];
+                }
+                privateMessages.value[otherUser].push(response.message);
+                newMessage.value = '';
+                scrollToBottom();
+              }
+            });
+          } else {
+            socket.value.emit('chatMessage', { 
+              text: newMessage.value,
+              type: 'text'
+            });
+            newMessage.value = '';
+          }
+        };
+        
+        const deleteMessage = (messageId, isPrivate) => {
+          socket.value.emit('deleteMessage', { messageId, isPrivate }, (response) => {
+            if (!response?.success) {
+              console.error('Failed to delete message:', response?.error);
+            }
+          });
+        };
+        
+        const handleImageUpload = (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+          
+          if (file.size > 5 * 1024 * 1024) {
+            alert('File size should be less than 5MB');
+            return;
+          }
+          
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const imageData = e.target.result;
+            
+            if (selectedUser.value) {
+              socket.value.emit('privateMessage', { 
+                to: selectedUser.value.username,
+                message: { 
+                  image: imageData,
+                  type: 'image'
+                }
+              }, (response) => {
+                if (response.success) {
+                  const otherUser = response.message.to;
+                  if (!privateMessages.value[otherUser]) {
+                    privateMessages.value[otherUser] = [];
+                  }
+                  privateMessages.value[otherUser].push(response.message);
+                  scrollToBottom();
+                }
+              });
+            } else {
+              socket.value.emit('chatMessage', { 
+                image: imageData,
+                type: 'image'
+              });
+            }
+          };
+          reader.readAsDataURL(file);
+          event.target.value = '';
+        };
+        
+        const handleProfileUpload = async (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+          
+          if (file.size > 5 * 1024 * 1024) {
+            alert('File size should be less than 5MB');
+            return;
+          }
+          
+          const formData = new FormData();
+          formData.append('profileImage', file);
+          
+          try {
+            const response = await axios.post('http://localhost:3001/upload-profile', formData, {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+                Authorization: `Bearer ${localStorage.getItem('token')}`
+              }
+            });
+            
+            if (response.data.success) {
+              currentUser.value.profileImage = response.data.profileImage;
+              fetchUsers();
+            }
+          } catch (error) {
+            console.error('Profile upload failed:', error);
+            alert('Failed to upload profile image. Please try again.');
+          }
+          
+          event.target.value = '';
+        };
+        
+        const searchUsers = async () => {
+          if (searchQuery.value.trim() === '') {
+            searchResults.value = [];
+            return;
+          }
+          
+          try {
+            const response = await axios.get(`http://localhost:3001/search-users?query=${searchQuery.value}`, {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`
+              }
+            });
+            
+            if (response.data.success) {
+              searchResults.value = response.data.users;
+            }
+          } catch (error) {
+            console.error('Search failed:', error);
+          }
+        };
+        
+        const formatTime = (timestamp) => {
+          return new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        };
+        
+        const scrollToBottom = () => {
+          nextTick(() => {
+            if (messagesContainer.value && messagesEnd.value) {
+              messagesContainer.value.scrollTo({
+                top: messagesContainer.value.scrollHeight,
+                behavior: 'smooth'
+              });
+            }
+          });
+        };
+        
+        const toggleSidebar = () => {
+          isSidebarOpen.value = !isSidebarOpen.value;
+        };
+
+        // Lifecycle hooks
+        onMounted(() => {
+          const token = localStorage.getItem('token');
+          if (token) {
+            try {
+              const decoded = jwt_decode(token);
+              currentUser.value = { username: decoded.username };
+              isAuthenticated.value = true;
+              connectSocket(token);
+              fetchUsers();
+            } catch (error) {
+              localStorage.removeItem('token');
+            }
+          }
+        });
+        
+        // Watchers
+        watch(selectedUser, () => {
+          scrollToBottom();
+        });
+
+        watch(isSidebarOpen, (newValue) => {
+          if (!newValue) {
+            nextTick(() => {
+              scrollToBottom();
+            });
+          }
+        });
+
+        return {
+          isAuthenticated,
+          isRegistering,
+          username,
+          password,
+          authError,
+          currentUser,
+          users,
+          selectedUser,
+          newMessage,
+          messages,
+          privateMessages,
+          currentMessages,
+          messagesContainer,
+          messagesEnd,
+          searchQuery,
+          searchResults,
+          isSidebarOpen,
+          handleAuth,
+          handleLogout,
+          selectChat,
+          sendMessage,
+          deleteMessage,
+          handleImageUpload,
+          handleProfileUpload,
+          searchUsers,
+          formatTime,
+          toggleSidebar
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
