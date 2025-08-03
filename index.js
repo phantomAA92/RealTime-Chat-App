@@ -56,7 +56,7 @@ const io = new Server(server, {
   //   methods: ["GET", "POST"]
   // }
   cors: {
-    origin: "https://real-time-chat-app-five-psi.vercel.app:3001",
+    origin: "http://localhost:3001",
     methods: ["GET", "POST"]
   }
 });
