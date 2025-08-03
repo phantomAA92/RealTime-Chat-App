@@ -116,7 +116,7 @@
             <input v-model="password" type="password" class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
           </div>
           
-          <button @click="handleAuth" class="w-full bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600 transition">
+          <button @click="handleAuth" class="w-full bg-black text-white py-2 rounded-md hover:bg-blue-600 transition">
             {{ isRegistering ? 'Register' : 'Login' }}
           </button>
           
@@ -133,7 +133,7 @@
     <!-- Chat Section -->
     <div v-else class="flex flex-col h-full">
       <!-- Header -->
-      <div class="bg-blue-500 text-white p-4 flex justify-between items-center">
+      <div class="bg-black text-white p-4 flex justify-between items-center">
         <div class="flex items-center space-x-3">
           <button @click="toggleSidebar" class="md:hidden text-white">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -156,14 +156,14 @@
         <!-- Sidebar -->
         <div class="sidebar w-1/4 bg-white border-r flex flex-col transition-all duration-300" :class="{ 'open': isSidebarOpen }">
           <!-- Profile Upload -->
-          <div class="p-4 border-b">
+          <!-- <div class="p-4 border-b">
             <label class="cursor-pointer flex items-center space-x-3">
               <div class="relative">
                 <img v-if="currentUser.profileImage" :src="currentUser.profileImage" class="profile-image">
                 <div v-else class="profile-image bg-gray-300 flex items-center justify-center text-white font-medium">
                   {{ currentUser.username.charAt(0).toUpperCase() }}
                 </div>
-                <div class="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-1">
+                <div class="absolute bottom-0 right-0 bg-black text-white rounded-full p-1">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                   </svg>
@@ -172,7 +172,7 @@
               <span class="text-sm">Change Profile</span>
               <input type="file" @change="handleProfileUpload" accept="image/*" class="file-input">
             </label>
-          </div>
+          </div> -->
           
           <!-- Search Bar -->
           <div class="p-4 border-b">
@@ -211,7 +211,7 @@
               :class="{'bg-blue-100': !selectedUser}" 
               class="p-3 rounded cursor-pointer flex items-center space-x-3 mb-1"
             >
-              <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
+              <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-white">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
@@ -270,7 +270,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
               </svg>
             </button>
-            <div class="profile-image bg-blue-500 flex items-center justify-center text-white">
+            <div class="profile-image bg-black flex items-center justify-center text-white">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
@@ -288,7 +288,7 @@
                   'flex justify-start': message.from !== currentUser.username
                 }">
                   <div :class="{
-                    'bg-blue-500 text-white': message.from === currentUser.username, 
+                    'bg-black text-white': message.from === currentUser.username, 
                     'bg-white': message.from !== currentUser.username
                   }" class="message-bubble p-3">
                     <div v-if="message.type === 'text'">{{ message.text }}</div>
@@ -316,7 +316,7 @@
               <div v-else>
                 <div :class="{'flex justify-end': message.user === currentUser.username, 'flex justify-start': message.user !== currentUser.username}">
                   <div :class="{
-                    'bg-blue-500 text-white': message.user === currentUser.username, 
+                    'bg-black text-white': message.user === currentUser.username, 
                     'bg-white': message.user !== currentUser.username
                   }" class="message-bubble p-3">
                     <div v-if="message.user !== currentUser.username" class="text-xs font-semibold text-gray-700 mb-1">
@@ -363,7 +363,7 @@
                 class="flex-1 px-4 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
               
-              <button type="submit" class="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600">
+              <button type="submit" class="bg-black text-white p-2 rounded-full hover:bg-blue-600">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
