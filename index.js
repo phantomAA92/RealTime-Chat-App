@@ -55,7 +55,10 @@ const io = new Server(server, {
   //   origin: "http://localhost:3000",
   //   methods: ["GET", "POST"]
   // }
-  cors: {}
+  cors: {
+    origin: "https://real-time-chat-app-five-psi.vercel.app:3001",
+    methods: ["GET", "POST"]
+  }
 });
 
 const JWT_SECRET = 'your_jwt_secret_key';
